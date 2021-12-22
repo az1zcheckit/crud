@@ -37,7 +37,7 @@ func (s *Server) handleGetAllBanners(writer http.ResponseWriter, request *http.R
 	all, err := s.bannersSvc.All(request.Context())
 	if err != nil {
 		log.Print(err)
-		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(writer, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
 		return
 	}
 	data, err := json.Marshal(all)
@@ -49,7 +49,7 @@ func (s *Server) handleGetAllBanners(writer http.ResponseWriter, request *http.R
 	log.Print("ready")
 	_, err = writer.Write([]byte(data))
 	if err != nil {
-		log.Print("Error!: Can't write anything on 'data'.")
+		log.Print("Error!: Can't write anything on data.")
 	}
 }
 
@@ -85,7 +85,7 @@ func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Req
 	}
 }
 
-// handleSaveBanner - сохраняет или обновляет баннер
+// handleSaveBanner - сохраняет или обновляет баннер.
 func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Request) {
 	// добавление всех параметров баннера (C.R.U.D)
 	idParam := request.URL.Query().Get("id")
@@ -116,13 +116,13 @@ func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Requ
 	bannerRes, err := s.bannersSvc.Save(request.Context(), &banner)
 	if err != nil {
 		log.Print()
-		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	data, err := json.Marshal(bannerRes)
 	if err != nil {
 		log.Print(err)
-		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	writer.Header().Set("Content-Type", "application/json")
@@ -132,6 +132,7 @@ func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
+// handleremoveByID - удаляет баннер по идентификатору.
 func (s *Server) handleremoveByID(writer http.ResponseWriter, request *http.Request) {
 	idParam := request.URL.Query().Get("id")
 
@@ -145,14 +146,14 @@ func (s *Server) handleremoveByID(writer http.ResponseWriter, request *http.Requ
 	delBanner, err := s.bannersSvc.RemoveByID(request.Context(), id)
 	if err != nil {
 		log.Print(err)
-		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
 	data, err := json.Marshal(delBanner)
 	if err != nil {
 		log.Print(err)
-		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	writer.Header().Set("Content-Type", "application/json")
