@@ -31,6 +31,7 @@ func (s *Server) Init() {
 	s.mux.HandleFunc("/banners.getById", s.handleGetPostByID)
 	s.mux.HandleFunc("/banners.save", s.handleSaveBanner)
 	s.mux.HandleFunc("/banners.removeById", s.handleremoveByID)
+	s.mux.HandleFunc("/process", s.process)
 }
 
 // handleGetAllBanners - ...
@@ -195,4 +196,16 @@ func (s *Server) handleremoveByID(writer http.ResponseWriter, request *http.Requ
 	if err != nil {
 		log.Print(err)
 	}
+}
+
+// Process..
+func (s *Server) process(writer http.ResponseWriter, request *http.Request) {
+	log.Print(request.RequestURI)
+	log.Print(request.Method)
+
+	body, err := ioutil.ReadAll(request.Body)
+	if err != nil {
+		log.Print(err)
+	}
+	log.Printf("%s", body)
 }
