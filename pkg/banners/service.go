@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -26,6 +28,7 @@ type Banner struct {
 	Content string
 	Button  string
 	Link    string
+	Image   string
 }
 
 // All возвращает все существующие баннеры.
@@ -54,14 +57,22 @@ func (s *Service) ByID(ctx context.Context, id int64) (*Banner, error) {
 
 // Save сохраняет/обновляет баннер.
 func (s *Service) Save(ctx context.Context, item *Banner) (*Banner, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if item.ID == 0 {
 		s.index++
+		img := ""
+		if item.Image != "" {
+			im := strings.Split(item.Image, ".")
+			img = strconv.FormatInt(s.index, 10) + "." + im[1]
+		}
 		newBanner := &Banner{
 			ID:      s.index,
 			Title:   item.Title,
 			Content: item.Content,
 			Button:  item.Button,
 			Link:    item.Link,
+			Image:   img,
 		}
 		s.items = append(s.items, newBanner)
 		return newBanner, nil
@@ -75,6 +86,11 @@ func (s *Service) Save(ctx context.Context, item *Banner) (*Banner, error) {
 	sBanner.Title = item.Title
 	sBanner.Content = item.Content
 	sBanner.Link = item.Link
+	if item.Image != "" {
+		im := strings.Split(item.Image, ".")
+		img := strconv.FormatInt(item.ID, 10) + "." + im[1]
+		sBanner.Image = img
+	}
 
 	return sBanner, nil
 }

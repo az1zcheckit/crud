@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -88,11 +89,11 @@ func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Req
 // handleSaveBanner - сохраняет или обновляет баннер.
 func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Request) {
 	// добавление всех параметров баннера (C.R.U.D)
-	idParam := request.URL.Query().Get("id")
-	titleParam := request.URL.Query().Get("title")
-	contentParam := request.URL.Query().Get("content")
-	buttonParam := request.URL.Query().Get("button")
-	linkParam := request.URL.Query().Get("link")
+	idParam := request.FormValue("id")
+	Title := request.FormValue("title")
+	Content := request.FormValue("content")
+	Button := request.FormValue("button")
+	Link := request.FormValue("link")
 
 	ID, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil {
@@ -101,24 +102,57 @@ func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	Title := string(titleParam)
-	Content := string(contentParam)
-	Button := string(buttonParam)
-	Link := string(linkParam)
-	// Сохранение/Обновление баннера
+	imageFile, imageHead, imageErr := request.FormFile("image")
+	if imageErr != nil {
+		banner := banners.Banner{
+			ID:      ID,
+			Title:   Title,
+			Content: Content,
+			Button:  Button,
+			Link:    Link,
+			Image:   "",
+		}
+		bannerRes, err := s.bannersSvc.Save(request.Context(), &banner)
+		if err != nil {
+			log.Print(err)
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		data, err := json.Marshal(bannerRes)
+		if err != nil {
+			log.Print(err)
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, err = writer.Write(data)
+		if err != nil {
+			log.Print(err)
+		}
+		return
+	}
+	fileName := imageHead.Filename
+	file, err := ioutil.ReadAll(imageFile)
+	if err != nil {
+		log.Print(err)
+	}
+
 	banner := banners.Banner{
 		ID:      ID,
 		Title:   Title,
 		Content: Content,
 		Button:  Button,
 		Link:    Link,
+		Image:   fileName,
 	}
 	bannerRes, err := s.bannersSvc.Save(request.Context(), &banner)
 	if err != nil {
-		log.Print()
+		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	ioutil.WriteFile("web/banners/"+bannerRes.Image, file, 0666)
 	data, err := json.Marshal(bannerRes)
 	if err != nil {
 		log.Print(err)
