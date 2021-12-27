@@ -2,23 +2,23 @@ package app
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
-	"github.com/az1zcheckit/http/pkg/banners"
+	"github.com/az1zcheckit/crud/pkg/customers"
 )
 
 // Server представляет собой логический сервер нашего приложения.
 type Server struct {
-	mux        *http.ServeMux
-	bannersSvc *banners.Service
+	mux          *http.ServeMux
+	customersSvc *customers.Service
 }
 
 // NewServer - функция-конструктор для создания сервера.
-func NewServer(mux *http.ServeMux, bannersSvc *banners.Service) *Server {
-	return &Server{mux: mux, bannersSvc: bannersSvc}
+func NewServer(mux *http.ServeMux, customersSvc *customers.Service) *Server {
+	return &Server{mux: mux, customersSvc: customersSvc}
 }
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -27,16 +27,18 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 // Init инициализирует сервер (регистрирует все Handler'ы)
 func (s *Server) Init() {
-	s.mux.HandleFunc("/banners.getAll", s.handleGetAllBanners)
-	s.mux.HandleFunc("/banners.getById", s.handleGetPostByID)
-	s.mux.HandleFunc("/banners.save", s.handleSaveBanner)
-	s.mux.HandleFunc("/banners.removeById", s.handleremoveByID)
-	s.mux.HandleFunc("/process", s.process)
+	s.mux.HandleFunc("/customers.getAll", s.handleGetAllCustomers)
+	s.mux.HandleFunc("/customers.getAllActive", s.handleGetAllActiveCustomers)
+	s.mux.HandleFunc("/customers.getById", s.handleGetCustomerByID)
+	s.mux.HandleFunc("/customers.save", s.handleSaveCustomers)
+	s.mux.HandleFunc("/customers.removeById", s.handleRemoveByID)
+	s.mux.HandleFunc("/customers.blockById", s.handleBlockByID)
+	s.mux.HandleFunc("/customers.unblockById", s.handleUnBlockByID)
 }
 
-// handleGetAllBanners - ...
-func (s *Server) handleGetAllBanners(writer http.ResponseWriter, request *http.Request) {
-	all, err := s.bannersSvc.All(request.Context())
+// handleGetAllCustomers берет всю инфу о покупателе..
+func (s *Server) handleGetAllCustomers(writer http.ResponseWriter, request *http.Request) {
+	all, err := s.customersSvc.All(request.Context())
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
@@ -48,15 +50,36 @@ func (s *Server) handleGetAllBanners(writer http.ResponseWriter, request *http.R
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	log.Print("ready")
+	log.Print("server's working perfect")
 	_, err = writer.Write([]byte(data))
 	if err != nil {
 		log.Print("Error!: Can't write anything on data.")
 	}
 }
 
-// handleGetPostByID - по id мы хотим отдавать баннер в формате JSON:
-func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Request) {
+// handleGetAllActiveCustomers - вся инфа об активных покупателей.
+func (s *Server) handleGetAllActiveCustomers(writer http.ResponseWriter, request *http.Request) {
+	allActive, err := s.customersSvc.All(request.Context())
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+		return
+	}
+	data, err := json.Marshal(allActive)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	log.Print("server's working perfect")
+	_, err = writer.Write([]byte(data))
+	if err != nil {
+		log.Print("Error!: Can't write anything on data.")
+	}
+}
+
+// handleGetCustomerByID - нахождение покупателя по id.
+func (s *Server) handleGetCustomerByID(writer http.ResponseWriter, request *http.Request) {
 	idParam := request.URL.Query().Get("id")
 
 	id, err := strconv.ParseInt(idParam, 10, 64)
@@ -66,7 +89,7 @@ func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	item, err := s.bannersSvc.ByID(request.Context(), id)
+	item, err := s.customersSvc.ByID(request.Context(), id)
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -79,7 +102,7 @@ func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Req
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-
+	log.Print("server's working perfect")
 	writer.Header().Set("Content-Type", "application/json")
 	_, err = writer.Write(data)
 	if err != nil {
@@ -87,14 +110,13 @@ func (s *Server) handleGetPostByID(writer http.ResponseWriter, request *http.Req
 	}
 }
 
-// handleSaveBanner - сохраняет или обновляет баннер.
-func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Request) {
+// handleSaveBanner - создаёт или обновляет покупателей .
+func (s *Server) handleSaveCustomers(writer http.ResponseWriter, request *http.Request) {
 	// добавление всех параметров баннера (C.R.U.D)
 	idParam := request.FormValue("id")
-	Title := request.FormValue("title")
-	Content := request.FormValue("content")
-	Button := request.FormValue("button")
-	Link := request.FormValue("link")
+	Name := request.FormValue("name")
+	Phone := request.FormValue("phone")
+	Active := request.FormValue("active")
 
 	ID, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil {
@@ -103,63 +125,32 @@ func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	imageFile, imageHead, imageErr := request.FormFile("image")
-	if imageErr != nil {
-		banner := banners.Banner{
-			ID:      ID,
-			Title:   Title,
-			Content: Content,
-			Button:  Button,
-			Link:    Link,
-			Image:   "",
-		}
-		bannerRes, err := s.bannersSvc.Save(request.Context(), &banner)
-		if err != nil {
-			log.Print(err)
-			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		data, err := json.Marshal(bannerRes)
-		if err != nil {
-			log.Print(err)
-			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json")
-		_, err = writer.Write(data)
-		if err != nil {
-			log.Print(err)
-		}
-		return
-	}
-	fileName := imageHead.Filename
-	file, err := ioutil.ReadAll(imageFile)
-	if err != nil {
-		log.Print(err)
+	act := true
+	log.Print(Active)
+	if Active != "true" {
+		act = false
 	}
 
-	banner := banners.Banner{
+	customer := customers.Customer{
 		ID:      ID,
-		Title:   Title,
-		Content: Content,
-		Button:  Button,
-		Link:    Link,
-		Image:   fileName,
+		Name:    Name,
+		Phone:   Phone,
+		Active:  act,
+		Created: time.Now(),
 	}
-	bannerRes, err := s.bannersSvc.Save(request.Context(), &banner)
+	customersRes, err := s.customersSvc.Save(request.Context(), &customer)
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-
-	ioutil.WriteFile("web/banners/"+bannerRes.Image, file, 0666)
-	data, err := json.Marshal(bannerRes)
+	data, err := json.Marshal(customersRes)
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	log.Print("server's working perfect")
 	writer.Header().Set("Content-Type", "application/json")
 	_, err = writer.Write(data)
 	if err != nil {
@@ -167,8 +158,8 @@ func (s *Server) handleSaveBanner(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
-// handleremoveByID - удаляет баннер по идентификатору.
-func (s *Server) handleremoveByID(writer http.ResponseWriter, request *http.Request) {
+// handleremoveByID - удаляет покупателя по идентификатору.
+func (s *Server) handleRemoveByID(writer http.ResponseWriter, request *http.Request) {
 	idParam := request.URL.Query().Get("id")
 
 	id, err := strconv.ParseInt(idParam, 10, 64)
@@ -178,34 +169,58 @@ func (s *Server) handleremoveByID(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	delBanner, err := s.bannersSvc.RemoveByID(request.Context(), id)
+	err = s.customersSvc.RemoveByID(request.Context(), id)
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	data, err := json.Marshal(delBanner)
+	/*	data, err := json.Marshal(rem)
+		if err != nil {
+			log.Print(err)
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, err = writer.Write(data)
+		if err != nil {
+			log.Print(err)
+		}*/
+}
+
+// handleBlockById - выставляет статус active в false.
+func (s *Server) handleBlockByID(writer http.ResponseWriter, request *http.Request) {
+	idParam := request.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idParam, 10, 64)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	err = s.customersSvc.BlockByID(request.Context(), id)
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
-	}
-	writer.Header().Set("Content-Type", "application/json")
-	_, err = writer.Write(data)
-	if err != nil {
-		log.Print(err)
 	}
 }
 
-// Process..
-func (s *Server) process(writer http.ResponseWriter, request *http.Request) {
-	log.Print(request.RequestURI)
-	log.Print(request.Method)
-
-	body, err := ioutil.ReadAll(request.Body)
+// handleUnBlockById - выставляет статус active в true.
+func (s *Server) handleUnBlockByID(writer http.ResponseWriter, request *http.Request) {
+	idParam := request.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil {
 		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
-	log.Printf("%s", body)
+
+	err = s.customersSvc.UnBlockByID(request.Context(), id)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 }

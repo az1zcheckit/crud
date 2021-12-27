@@ -1,21 +1,26 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"sync"
 
-	"github.com/az1zcheckit/http/cmd/app"
-	"github.com/az1zcheckit/http/pkg/banners"
+	"github.com/az1zcheckit/crud/cmd/app"
+	"github.com/az1zcheckit/crud/pkg/customers"
+	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 func main() {
 	host := "0.0.0.0"
 	port := "9999"
+	dsn := "postgres://app:pass@localhost:5432/db"
 
-	if err := execute(host, port); err != nil {
+	if err := execute(host, port, dsn); err != nil {
+		log.Print(err)
 		os.Exit(1)
 	}
 }
@@ -25,7 +30,6 @@ type handler struct {
 	handlers map[string]http.HandlerFunc
 }
 
-// ServeHTTP обрабатывает все запросы
 func (h *handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	h.mu.RLock()
 	handler, ok := h.handlers[request.URL.Path]
@@ -39,19 +43,51 @@ func (h *handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	handler(writer, request)
 }
 
-// creating Server
-func execute(host string, port string) (err error) {
-	mux := http.NewServeMux()
-	bannersSvc := banners.NewService()
+func execute(host string, port string, dsn string) (err error) {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := db.Close(); cerr != nil {
+			if err == nil {
+				err = cerr
+				return
+			}
+			log.Print(err)
+		}
+	}()
+	// TODO запросы
+	ctx := context.Background()
+	_, err = db.ExecContext(ctx, /*`
+	/*INSERT INTO customers(name, phone)
+	VALUES ('Kimki', '+99200000001'),
+	('Perviz', '+992900100180'),
+	('Aziz', '+992904444047'),
+	('Kemren', '+9928844880001'),
+	('Beheder', '+992904487676'),
+	('Behzed', '+992908787845'),
+	('Oogway', '+992884020102'),
+	('Seber', '+992213711313'),
+	('Buned', '+992900952956');
+	`*/``)
 
-	server := app.NewServer(mux, bannersSvc)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	mux := http.NewServeMux()
+	customersSvc := customers.NewService(db)
+
+	server := app.NewServer(mux, customersSvc)
 	server.Init()
 
 	srv := &http.Server{
 		Addr:    net.JoinHostPort(host, port),
 		Handler: server,
 	}
-	// running with ListenAndServe
-	log.Print("server is running in "+host, ":"+port+"..")
+
+	log.Print("server is running in " + host + ":" + port)
 	return srv.ListenAndServe()
 }
