@@ -38,6 +38,9 @@ type Customer struct {
 
 // ByID возвращает покупателя по идентификатору.
 func (s *Service) ByID(ctx context.Context, id int64) (*Customer, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	item := &Customer{}
 
 	err := s.db.QueryRowContext(ctx, `
@@ -58,21 +61,21 @@ func (s *Service) ByID(ctx context.Context, id int64) (*Customer, error) {
 
 // All возвращает все данные покупателя.
 func (s *Service) All(ctx context.Context) ([]*Customer, error) {
-//	s.mu.RLock()
-//	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	// создаём слайс для хранения результатов
 	items := make([]*Customer, 0)
 
 	// делаем сам запрос
 	rows, err := s.db.QueryContext(ctx, `
-				SELECT id, name, phone, active, created FROM customers
-			`)
+		SELECT id, name, phone, active, created FROM customers
+	`)
 
 	// проверяем на ошибки
 	if err != nil {
 		log.Print(err)
-		return nil, ErrNotFound
+		return nil, err
 	}
 	// rows нужно закрывать
 	defer func() {
@@ -86,7 +89,7 @@ func (s *Service) All(ctx context.Context) ([]*Customer, error) {
 		err = rows.Scan(&item.ID, &item.Name, &item.Phone, &item.Active, &item.Created)
 		if err != nil {
 			log.Print(err)
-			return nil, ErrNotFound
+			return nil, err
 		}
 		items = append(items, item)
 	}
@@ -94,7 +97,7 @@ func (s *Service) All(ctx context.Context) ([]*Customer, error) {
 	err = rows.Err()
 	if err != nil {
 		log.Print(err)
-		return nil, ErrNotFound
+		return nil, err
 	}
 
 	return items, nil
@@ -109,8 +112,8 @@ func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 	items := make([]*Customer, 0)
 	// делаем сам запрос
 	rows, err := s.db.QueryContext(ctx, `
-					SELECT id, name, phone, active, created FROM customers WHERE active
-				`)
+		SELECT id, name, phone, active, created FROM customers WHERE active
+	`)
 	// проверяем на ошибки
 	if err != nil {
 		log.Print(err)
@@ -128,7 +131,7 @@ func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 		err = rows.Scan(&item.ID, &item.Name, &item.Phone, &item.Active, &item.Created)
 		if err != nil {
 			log.Print(err)
-			return nil, ErrNotFound
+			return nil, err
 		}
 		items = append(items, item)
 	}
@@ -136,7 +139,7 @@ func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 	err = rows.Err()
 	if err != nil {
 		log.Print(err)
-		return nil, ErrNotFound
+		return nil, err
 	}
 
 	return items, nil
@@ -172,6 +175,7 @@ func (s *Service) Save(ctx context.Context, item *Customer) (*Customer, error) {
 
 	if err != nil {
 		log.Print(err)
+		return nil, err
 	}
 
 	return res, nil
@@ -192,7 +196,7 @@ func (s *Service) RemoveByID(ctx context.Context, id int64) error {
 
 	if err != nil {
 		log.Print(err)
-		return ErrInternal
+		return err
 	}
 
 	return nil

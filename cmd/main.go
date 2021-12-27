@@ -17,7 +17,7 @@ import (
 func main() {
 	host := "0.0.0.0"
 	port := "9999"
-	dsn := "postgres://app:pass@localhost:5432/db"
+	dsn := "postgres://app:postgres@localhost:5432/db"
 
 	if err := execute(host, port, dsn); err != nil {
 		log.Print(err)
@@ -59,18 +59,15 @@ func execute(host string, port string, dsn string) (err error) {
 	}()
 	// TODO запросы
 	ctx := context.Background()
-	_, err = db.ExecContext(ctx, /*`
-	/*INSERT INTO customers(name, phone)
-	VALUES ('Kimki', '+99200000001'),
-	('Perviz', '+992900100180'),
-	('Aziz', '+992904444047'),
-	('Kemren', '+9928844880001'),
-	('Beheder', '+992904487676'),
-	('Behzed', '+992908787845'),
-	('Oogway', '+992884020102'),
-	('Seber', '+992213711313'),
-	('Buned', '+992900952956');
-	`*/``)
+	_, err = db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS customers (
+			id BIGSERIAL PRIMARY KEY,
+			name TEXT NOT NULL,
+			phone TEXT NOT NULL UNIQUE,
+			active BOOLEAN NOT NULL DEFAULT TRUE,
+			created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
 
 	if err != nil {
 		log.Print(err)
@@ -88,6 +85,6 @@ func execute(host string, port string, dsn string) (err error) {
 		Handler: server,
 	}
 
-	log.Print("server is running in " + host + ":" + port)
+	log.Print("server start " + host + ":" + port)
 	return srv.ListenAndServe()
 }
