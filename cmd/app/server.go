@@ -59,7 +59,7 @@ func (s *Server) handleGetAllCustomers(writer http.ResponseWriter, request *http
 
 // handleGetAllActiveCustomers - вся инфа об активных покупателей.
 func (s *Server) handleGetAllActiveCustomers(writer http.ResponseWriter, request *http.Request) {
-	allActive, err := s.customersSvc.All(request.Context())
+	allActive, err := s.customersSvc.AllActive(request.Context())
 	if err != nil {
 		log.Print(err)
 		http.Error(writer, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
@@ -156,6 +156,7 @@ func (s *Server) handleSaveCustomers(writer http.ResponseWriter, request *http.R
 	if err != nil {
 		log.Print(err)
 	}
+	return
 }
 
 // handleremoveByID - удаляет покупателя по идентификатору.
