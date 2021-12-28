@@ -2,11 +2,13 @@ package customers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 // ErrNotFound возвращается, когда покупатель не найден.
@@ -17,14 +19,14 @@ var ErrInternal = errors.New("internal error")
 
 // Service описывает сервис работы с покупателями.
 type Service struct {
-	db    *sql.DB
+	pool  *pgxpool.Pool
 	mu    sync.RWMutex
 	items []*Customer
 }
 
 // NewService создаёт сервис.
-func NewService(db *sql.DB) *Service {
-	return &Service{db: db}
+func NewService(pool *pgxpool.Pool) *Service {
+	return &Service{pool: pool}
 }
 
 // Customer представляет информацию о покупателе.
@@ -43,11 +45,11 @@ func (s *Service) ByID(ctx context.Context, id int64) (*Customer, error) {
 
 	item := &Customer{}
 
-	err := s.db.QueryRowContext(ctx, `
+	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, phone, active, created FROM customers WHERE id = $1 
 	`, id).Scan(&item.ID, &item.Name, &item.Phone, &item.Active, &item.Created)
 
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 
@@ -68,7 +70,7 @@ func (s *Service) All(ctx context.Context) ([]*Customer, error) {
 	items := make([]*Customer, 0)
 
 	// делаем сам запрос
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, phone, active, created FROM customers
 	`)
 
@@ -78,11 +80,8 @@ func (s *Service) All(ctx context.Context) ([]*Customer, error) {
 		return nil, err
 	}
 	// rows нужно закрывать
-	defer func() {
-		if cerr := rows.Close(); cerr != nil {
-			log.Print(cerr)
-		}
-	}()
+	defer rows.Close()
+
 	// rows.Next() возвращает true до тех пор, пока дальше есть строки
 	for rows.Next() {
 		item := &Customer{}
@@ -106,12 +105,12 @@ func (s *Service) All(ctx context.Context) ([]*Customer, error) {
 // AllActive возвращает все данные активных покупателей.
 func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 	s.mu.RLock()
-	defer s.mu.Unlock()
+	defer s.mu.RUnlock()
 
 	// создаём слайс для хранения результатов
 	items := make([]*Customer, 0)
 	// делаем сам запрос
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, phone, active, created FROM customers WHERE active
 	`)
 	// проверяем на ошибки
@@ -120,11 +119,8 @@ func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 		return nil, ErrNotFound
 	}
 	// rows нужно закрывать
-	defer func() {
-		if cerr := rows.Close(); cerr != nil {
-			log.Print(cerr)
-		}
-	}()
+	defer rows.Close()
+
 	// rows.Next() возвращает true до тех пор, пока дальше есть строки
 	for rows.Next() {
 		item := &Customer{}
@@ -149,9 +145,10 @@ func (s *Service) AllActive(ctx context.Context) ([]*Customer, error) {
 func (s *Service) Save(ctx context.Context, item *Customer) (*Customer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	res := &Customer{}
 	if item.ID == 0 {
-		err := s.db.QueryRowContext(ctx, `
+		err := s.pool.QueryRow(ctx, `
 			INSERT INTO customers(name, phone) VALUES ($1, $2) ON CONFLICT (phone) DO UPDATE SET name = excluded.name, active = excluded.active, created = excluded.created
 			RETURNING id, name, phone, active, created
 		`, item.Name, item.Phone).Scan(&res.ID, &res.Name, &res.Phone, &res.Active, &res.Created)
@@ -169,7 +166,7 @@ func (s *Service) Save(ctx context.Context, item *Customer) (*Customer, error) {
 		log.Print(err)
 		return nil, ErrNotFound
 	}
-	err = s.db.QueryRowContext(ctx, `
+	err = s.pool.QueryRow(ctx, `
 		UPDATE customers SET name = $1, phone = $2, active = $3, created = $4 where id = $5 RETURNING id, name, phone, active, created
 	`, item.Name, item.Phone, item.Active, item.Created, item.ID).Scan(&res.ID, &res.Name, &res.Phone, &res.Active, &res.Created)
 
@@ -185,12 +182,13 @@ func (s *Service) Save(ctx context.Context, item *Customer) (*Customer, error) {
 func (s *Service) RemoveByID(ctx context.Context, id int64) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	_, err := s.ByID(ctx, id)
 	if err != nil {
 		log.Print(err)
 		return ErrNotFound
 	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = s.pool.Exec(ctx, `
 		DELETE FROM customers WHERE id = $1;
 	`, id)
 
@@ -213,7 +211,7 @@ func (s *Service) BlockByID(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 
-	_, err = s.db.ExecContext(ctx, `
+	_, err = s.pool.Exec(ctx, `
 	 	UPDATE customers SET active = false WHERE id = $1
 	`, id)
 
@@ -236,7 +234,7 @@ func (s *Service) UnBlockByID(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 
-	_, err = s.db.ExecContext(ctx, `
+	_, err = s.pool.Exec(ctx, `
 	 	UPDATE customers SET active = true WHERE id = $1
 	`, id)
 
