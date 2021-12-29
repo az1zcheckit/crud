@@ -11,6 +11,7 @@ import (
 
 	"github.com/az1zcheckit/crud/cmd/app"
 	"github.com/az1zcheckit/crud/pkg/customers"
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/dig"
 )
@@ -48,7 +49,7 @@ func execute(host string, port string, dsn string) (err error) {
 	// создание контейнера где будем хранить все методы и функции.
 	deps := []interface{}{
 		app.NewServer,
-		http.NewServeMux,
+		mux.NewRouter, // mux -> "github.com/gorilla/mux"
 		func() (*pgxpool.Pool, error) {
 			ctx, _ := context.WithTimeout(context.Background(), time.Second*5)
 			return pgxpool.Connect(ctx, dsn)

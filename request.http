@@ -1,0 +1,8 @@
+POST http://localhost:9999/customers
+Content-Type: application/json
+
+{
+    "id": 0,
+    "name": "Parviz",
+    "phone": "+992900100180"
+}
