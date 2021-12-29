@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/az1zcheckit/crud/cmd/app/middleware"
 	"github.com/az1zcheckit/crud/pkg/customers"
+	"github.com/az1zcheckit/crud/pkg/security"
 	"github.com/gorilla/mux"
 )
 
@@ -14,11 +16,12 @@ import (
 type Server struct {
 	mux          *mux.Router
 	customersSvc *customers.Service
+	securitySvc  *security.Service
 }
 
 // NewServer - функция-конструктор для создания сервера.
-func NewServer(mux *mux.Router, customersSvc *customers.Service) *Server {
-	return &Server{mux: mux, customersSvc: customersSvc}
+func NewServer(mux *mux.Router, customersSvc *customers.Service, securitySvc *security.Service) *Server {
+	return &Server{mux: mux, customersSvc: customersSvc, securitySvc: securitySvc}
 }
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -52,6 +55,7 @@ func (s *Server) Init() {
 	s.mux.HandleFunc("/customers/{id}/block", s.handleBlockByID).Methods(POST)
 	//s.mux.HandleFunc("/customers.unblockById", s.handleUnBlockByID)
 	s.mux.HandleFunc("/customers/{id}/block", s.handleUnBlockByID).Methods(DELETE)
+	s.mux.Use(middleware.Basic(s.securitySvc.Auth))
 }
 
 // handleGetAllCustomers берет всю инфу о покупателе..

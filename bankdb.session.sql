@@ -5,3 +5,6 @@
 --update customers set active = false where id = 7;
 --update customers set active = true where id = 8;
 
+create table managers Values(
+    
+)

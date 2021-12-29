@@ -1,22 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
 </head>
-
 <body>
-    <form action="http://localhost:9999/process?tags=query" method="POST" enctype="text/plain"> 
-        <input type="number" name="count">
-        <input type="text">
-        <input type="text" name="tags">
-        <input type="text" name="tags">
-        <input type="file" name="image">
+    <form action="http://localhost:9999/customers.save" method="POST" enctype="multipart/form-data">
+        <input type="number" name="id" value="0">
+        <input type="text" name="name" value="Shohin">
+        <input type="text" name="phone" value="99290050050">
+        <input type="checkbox" name="active" value="True">
+        <input type="date" name="created" value="11.12.2020">       
         <button>Отправить</button>
     </form>
+    <form action="http://localhost:9999/customers.getById" method="GET">
+        <input type="number" name="id" value="1">
+        <button>Go</button>
+    </form>
+    <form action="http://localhost:9999/customers.getAll" method="GET">
+        <button>Get All</button>
+    </form>
+    <form action="http://localhost:9999/customers.getAllActive" method="GET">
+        <button>Get All Active</button>
+    </form>
+    <form action="http://localhost:9999/customers.removeById" method="GET">
+        <input type="number" name="id">
+        <button>Delete</button>
+    </form>
+    <form action="http://localhost:9999/customers.blockById" method="GET">
+        <input type="number" name="id">
+        <button>Block</button>
+    </form>
+    <form action="http://localhost:9999/customers.unblockById" method="GET">
+        <input type="number" name="id">
+        <button>Unblock</button>
+    </form>
 </body>
-
 </html>

@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/az1zcheckit/crud/cmd/app"
 	"github.com/az1zcheckit/crud/pkg/customers"
+	"github.com/az1zcheckit/crud/pkg/security"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/dig"
@@ -19,30 +19,14 @@ import (
 func main() {
 	host := "0.0.0.0"
 	port := "9999"
+	// адрес подключения
+	//протокол://логин:палоь@хост:порт/бд
 	dsn := "postges://app:pass@localhost:5432/db"
 
 	if err := execute(host, port, dsn); err != nil {
 		log.Print(err)
 		os.Exit(1)
 	}
-}
-
-type handler struct {
-	mu       *sync.RWMutex
-	handlers map[string]http.HandlerFunc
-}
-
-func (h *handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	h.mu.RLock()
-	handler, ok := h.handlers[request.URL.Path]
-	h.mu.RUnlock()
-
-	if !ok {
-		http.Error(writer, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
-	handler(writer, request)
 }
 
 func execute(host string, port string, dsn string) (err error) {
@@ -55,6 +39,7 @@ func execute(host string, port string, dsn string) (err error) {
 			return pgxpool.Connect(ctx, dsn)
 		},
 		customers.NewService,
+		security.NewService,
 		func(server *app.Server) *http.Server {
 			return &http.Server{
 				Addr:    net.JoinHostPort(host, port),
@@ -66,6 +51,7 @@ func execute(host string, port string, dsn string) (err error) {
 	for _, dep := range deps {
 		err = container.Provide(dep)
 		if err != nil {
+			log.Print(err)
 			return err
 		}
 	}
