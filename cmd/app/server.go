@@ -2,21 +2,59 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/az1zcheckit/crud/cmd/app/middleware"
 	"github.com/az1zcheckit/crud/pkg/customers"
 	"github.com/az1zcheckit/crud/pkg/security"
 	"github.com/gorilla/mux"
 )
+
+var ErrNotFound = errors.New("item not found")
+
+// ErrNoSuchUser если пользоваетль не найден.
+var ErrNoSuchUser = errors.New("No such user")
+
+// ErrInvalidPassword если пароль не верный
+var ErrInvalidPassword = errors.New("Invalid password")
+
+// ErrInternal если происходить другая ошибка
+var ErrInternal = errors.New("Internal error")
+
+// ErrExpired исчерпал свой токен
+var ErrExpired = errors.New("Token is expired")
 
 // Server представляет собой логический сервер нашего приложения.
 type Server struct {
 	mux          *mux.Router
 	customersSvc *customers.Service
 	securitySvc  *security.Service
+}
+
+// Token..
+type Token struct {
+	Token string `json:"token"`
+}
+
+// Responce..
+type Responce struct {
+	CustomerID int64  `json:"customerId"`
+	Status     string `json:"status"`
+	Reason     string `json:"reason"`
+}
+
+// ResponceOk..
+type ResponceOk struct {
+	Status     string `json:"status"`
+	CustomerID int64  `json:"customerId"`
+}
+
+// ResponceFail..
+type ResponceFail struct {
+	Status string `json:"status"`
+	Reason string `json:"reason"`
 }
 
 // NewServer - функция-конструктор для создания сервера.
@@ -55,7 +93,132 @@ func (s *Server) Init() {
 	s.mux.HandleFunc("/customers/{id}/block", s.handleBlockByID).Methods(POST)
 	//s.mux.HandleFunc("/customers.unblockById", s.handleUnBlockByID)
 	s.mux.HandleFunc("/customers/{id}/block", s.handleUnBlockByID).Methods(DELETE)
-	s.mux.Use(middleware.Basic(s.securitySvc.Auth))
+	// s.mux.Use(middleware.Basic(s.securitySvc.Auth))
+
+	s.mux.HandleFunc("/api/customers", s.SaveCustomers).Methods(POST)
+	s.mux.HandleFunc("/api/customers/token", s.handleGetToken).Methods(POST)
+	s.mux.HandleFunc("/api/customers/token/validate", s.handleValidateToken).Methods(POST)
+}
+
+func (s *Server) handleGetToken(writer http.ResponseWriter, request *http.Request) {
+	var auth *security.Auth
+	var tok Token
+	err := json.NewDecoder(request.Body).Decode(&auth)
+	log.Print(auth)
+	if err != nil {
+		log.Print("Can't decode login and password")
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	log.Print("Login: ", auth.Login, "Password: ", auth.Password)
+
+	token, err := s.customersSvc.TokenForCustomer(request.Context(), auth.Login, auth.Password)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	tok.Token = token
+	data, err := json.Marshal(tok)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_, err = writer.Write(data)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleValidateToken(writer http.ResponseWriter, request *http.Request) {
+	var fail ResponceFail
+	var ok ResponceOk
+	var token Token
+	var data []byte
+	code := 200
+
+	err := json.NewDecoder(request.Body).Decode(&token)
+	if err != nil {
+		log.Print("Can't decode token")
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	id, er := s.securitySvc.AuthForCustomer(request.Context(), token.Token)
+
+	if er == security.ErrNoSuchUser {
+		code = 404
+		fail.Status = "fail"
+		fail.Reason = "not found"
+	} else if er == security.ErrExpiredToken {
+		code = 400
+		fail.Status = "fail"
+		fail.Reason = "expired"
+	} else if er == nil {
+		log.Print(id)
+		ok.Status = "ok"
+		ok.CustomerID = id
+	} else {
+		log.Print("err", er)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	if code != 200 {
+		writer.WriteHeader(code)
+
+		data, err = json.Marshal(fail)
+		if err != nil {
+			log.Print(err)
+		}
+	} else {
+		data, err = json.Marshal(ok)
+		if err != nil {
+			log.Print(err)
+		}
+	}
+	_, err = writer.Write(data)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	return
+}
+
+func (s *Server) SaveCustomers(writer http.ResponseWriter, request *http.Request) {
+	var item *customers.Customer
+	err := json.NewDecoder(request.Body).Decode(&item)
+	log.Print(item)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	customer, err := s.customersSvc.SaveCustomer(request.Context(), item)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	log.Print(customer)
+
+	data, err := json.Marshal(customer)
+	if err != nil {
+		log.Print(err)
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	_, err = writer.Write(data)
+	if err != nil {
+		log.Print(err)
+	}
+	http.Error(writer, http.StatusText(http.StatusOK), http.StatusOK)
+	return
 }
 
 // handleGetAllCustomers берет всю инфу о покупателе..

@@ -27,6 +27,30 @@ func main() {
 		log.Print(err)
 		os.Exit(1)
 	}
+	// 	password := "secret"
+	// 	// hash := md5.New()
+	// 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	// 	if err != nil {
+	// 		log.Print(err)
+	// 		os.Exit(1)
+	// 	}
+	// 	log.Print(hex.EncodeToString(hash))
+
+	// 	err = bcrypt.CompareHashAndPassword(hash, []byte(password))
+	// 	if err != nil {
+	// 		log.Print("password is invalid")
+	// 		os.Exit(1)
+	// 	}
+	// 	// salted := append(salt, []byte(password)...)
+	// 	// hash := md5.New()
+	// 	// _, err = hash.Write(salted)
+	// 	// if err != nil {
+	// 	// 	log.Print(err)
+	// 	// 	os.Exit(1)
+	// 	// }
+	// 	// // считаем хэш
+	// 	// sum := hash.Sum([]byte(nil))
+	// 	// log.Print(hex.EncodeToString(sum)) // можно просто log.Printf("%x", sum)
 }
 
 func execute(host string, port string, dsn string) (err error) {

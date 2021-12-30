@@ -2,6 +2,8 @@ package customers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log"
 	"sync"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ErrNotFound возвращается, когда покупатель не найден.
@@ -16,6 +19,15 @@ var ErrNotFound = errors.New("item not found")
 
 // ErrInternal возвращается, когда произошла внутренняя ошибка.
 var ErrInternal = errors.New("internal error")
+
+// ErrNoSuchUser если пользователь не найден
+var ErrNoSuchUser = errors.New("No such user")
+
+// ErrInvalidPassword если пароль не верный
+var ErrInvalidPassword = errors.New("Invalid password")
+
+// ErrExpiredToken возвращается когда чувак исчерпал свой токен
+var ErrExpiredToken = errors.New("Token is expired")
 
 // Service описывает сервис работы с покупателями.
 type Service struct {
@@ -31,11 +43,78 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // Customer представляет информацию о покупателе.
 type Customer struct {
-	ID      int64     `json:"id"`
-	Name    string    `json:"name"`
-	Phone   string    `json:"phone"`
-	Active  bool      `json:"active"`
-	Created time.Time `json:"created"`
+	ID       int64     `json:"id"`
+	Name     string    `json:"name"`
+	Phone    string    `json:"phone"`
+	Password string    `json:"password"`
+	Active   bool      `json:"active"`
+	Created  time.Time `json:"created"`
+}
+
+//	TokenForCustomer генерирует токен для пользователя.
+//	Если пользователь не найден, возвращается ErrNoSuchUser.
+//	Если пароль не верен, возвращается ErrInvalidPassword.
+//	Если происходит другая ошибка, возвращается ErrInternal.
+func (s *Service) TokenForCustomer(
+	ctx context.Context,
+	phone string,
+	password string,
+) (token string, err error) {
+	var hash string
+	var id int64
+	err = s.pool.QueryRow(ctx, `SELECT id, password FROM customers WHERE phone = $1`, phone).Scan(&id, &hash)
+
+	if err == pgx.ErrNoRows {
+		return "", ErrInvalidPassword
+	}
+	if err != nil {
+		return "", ErrInternal
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	if err != nil {
+		return "", ErrInvalidPassword
+	}
+
+	buffer := make([]byte, 256)
+	n, err := rand.Read(buffer)
+	if n != len(buffer) || err != nil {
+		return "", ErrInternal
+	}
+
+	token = hex.EncodeToString(buffer)
+	_, err = s.pool.Exec(ctx, `INSERT INTO customers_tokens(token, customer_id) VALUES($1, $2)`, token, id)
+	if err != nil {
+		return "", ErrInternal
+	}
+
+	return token, nil
+}
+
+// SaveCustomer сохраняет покупателя с паролем в файле JSON
+func (s *Service) SaveCustomer(ctx context.Context, item *Customer) (*Customer, error) {
+
+	if item.ID == 0 {
+		hash, err := bcrypt.GenerateFromPassword([]byte(item.Password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Print(err)
+			return nil, ErrInternal
+		}
+		log.Print(hex.EncodeToString(hash))
+
+		res := &Customer{}
+		err = s.pool.QueryRow(ctx, `
+			INSERT INTO customers(name, phone, password) VALUES ($1, $2, $3)
+			RETURNING id, name, phone, password, active, created
+			`, item.Name, item.Phone, hash).Scan(&res.ID, &res.Name, &res.Phone, &res.Password, &res.Active, &res.Created)
+
+		if err != nil {
+			log.Print(err)
+			return nil, ErrInternal
+		}
+		return res, nil
+	}
+	return nil, ErrInternal
 }
 
 // ByID возвращает покупателя по идентификатору.
